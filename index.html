@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamischer Strompreis Einsiedeln</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border-bottom: 1px solid #334155;
+            padding: 1.5rem 2rem;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: #f8fafc;
+        }
+        .header p {
+            color: #94a3b8;
+            font-size: 0.9rem;
+            margin-top: 0.3rem;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1.5rem;
+        }
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 1.2rem;
+            text-align: center;
+        }
+        .card .label {
+            font-size: 0.8rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+        }
+        .card .value {
+            font-size: 2rem;
+            font-weight: 700;
+        }
+        .card .unit {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            margin-top: 0.2rem;
+        }
+        .card.current .value { color: #38bdf8; }
+        .card.low .value { color: #4ade80; }
+        .card.high .value { color: #f87171; }
+        .card.avg .value { color: #fbbf24; }
+        .chart-container {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .chart-wrapper {
+            position: relative;
+            height: 400px;
+        }
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .tab {
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            background: transparent;
+            color: #94a3b8;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+        .tab:hover { border-color: #38bdf8; color: #38bdf8; }
+        .tab.active { background: #38bdf8; color: #0f172a; border-color: #38bdf8; font-weight: 600; }
+        .table-container {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .table-container h3 {
+            padding: 1rem 1.5rem;
+            font-size: 1rem;
+            border-bottom: 1px solid #334155;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th {
+            background: #0f172a;
+            padding: 0.7rem 1rem;
+            text-align: left;
+            font-size: 0.8rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            position: sticky;
+            top: 0;
+        }
+        td {
+            padding: 0.6rem 1rem;
+            border-top: 1px solid #1e293b;
+            font-size: 0.9rem;
+            font-variant-numeric: tabular-nums;
+        }
+        tr:nth-child(even) { background: rgba(15, 23, 42, 0.3); }
+        tr.current-row {
+            background: rgba(56, 189, 248, 0.1);
+            border-left: 3px solid #38bdf8;
+        }
+        .price-bar {
+            height: 8px;
+            border-radius: 4px;
+            background: #334155;
+            position: relative;
+            min-width: 60px;
+        }
+        .price-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s;
+        }
+        .scroll-table {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .footer {
+            text-align: center;
+            padding: 1.5rem;
+            color: #64748b;
+            font-size: 0.8rem;
+        }
+        .footer a { color: #38bdf8; text-decoration: none; }
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: #94a3b8;
+        }
+        .spinner {
+            width: 40px; height: 40px;
+            border: 3px solid #334155;
+            border-top-color: #38bdf8;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .error { color: #f87171; text-align: center; padding: 2rem; }
+        .toggle-row {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .info-text {
+            font-size: 0.8rem;
+            color: #64748b;
+            margin-left: auto;
+        }
+        @media (max-width: 640px) {
+            .chart-wrapper { height: 300px; }
+            .cards { grid-template-columns: repeat(2, 1fr); }
+            .card .value { font-size: 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Dynamischer Strompreis &mdash; Einsiedeln</h1>
+        <p>EKZ Einsiedeln AG &middot; Tarif: Energie Dynamisch + Netz 400D</p>
+    </div>
+
+    <div class="container">
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            Lade aktuelle Tarifdaten...
+        </div>
+
+        <div id="content" style="display:none;">
+            <div class="cards">
+                <div class="card current">
+                    <div class="label">Aktueller Preis</div>
+                    <div class="value" id="currentPrice">--</div>
+                    <div class="unit">Rp./kWh (exkl. MwSt.)</div>
+                </div>
+                <div class="card low">
+                    <div class="label">Tiefstwert heute</div>
+                    <div class="value" id="lowPrice">--</div>
+                    <div class="unit">Rp./kWh</div>
+                </div>
+                <div class="card high">
+                    <div class="label">Höchstwert heute</div>
+                    <div class="value" id="highPrice">--</div>
+                    <div class="unit">Rp./kWh</div>
+                </div>
+                <div class="card avg">
+                    <div class="label">Durchschnitt heute</div>
+                    <div class="value" id="avgPrice">--</div>
+                    <div class="unit">Rp./kWh</div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <div class="toggle-row">
+                    <div class="tabs">
+                        <button class="tab active" data-view="integrated" onclick="switchView('integrated')">Gesamtpreis</button>
+                        <button class="tab" data-view="electricity" onclick="switchView('electricity')">Nur Energie</button>
+                    </div>
+                    <div class="tabs">
+                        <button class="tab active" data-day="today" onclick="switchDay('today')">Heute</button>
+                        <button class="tab" data-day="tomorrow" id="btnTomorrow" onclick="switchDay('tomorrow')" style="display:none;">Morgen</button>
+                    </div>
+                    <span class="info-text" id="pubTime"></span>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="priceChart"></canvas>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <h3 id="tableTitle">Preise heute &mdash; 15-Minuten-Intervalle</h3>
+                <div class="scroll-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Zeit</th>
+                                <th>Gesamtpreis</th>
+                                <th>Energiepreis</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="priceTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="errorMsg" class="error" style="display:none;"></div>
+    </div>
+
+    <div class="footer">
+        Datenquelle: <a href="https://api.tariffs.ekz.ch/swagger" target="_blank">EKZ Tariffs API</a> &middot;
+        Alle Preise exkl. MwSt. &middot; Aktualisierung täglich bis 18:00 Uhr
+    </div>
+
+    <script>
+        const API_BASE = 'https://api.tariffs.ekz.ch/v1/tariffs';
+        let chartInstance = null;
+        let allData = { today: null, tomorrow: null };
+        let currentView = 'integrated';
+        let currentDay = 'today';
+
+        function formatDate(d) {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
+
+        function toLocalISOString(d) {
+            const off = -d.getTimezoneOffset();
+            const sign = off >= 0 ? '+' : '-';
+            const hh = String(Math.floor(Math.abs(off) / 60)).padStart(2, '0');
+            const mm = String(Math.abs(off) % 60).padStart(2, '0');
+            return `${formatDate(d)}T00:00:00${sign}${hh}:${mm}`;
+        }
+
+        function endOfDayISO(d) {
+            const off = -d.getTimezoneOffset();
+            const sign = off >= 0 ? '+' : '-';
+            const hh = String(Math.floor(Math.abs(off) / 60)).padStart(2, '0');
+            const mm = String(Math.abs(off) % 60).padStart(2, '0');
+            return `${formatDate(d)}T23:59:59${sign}${hh}:${mm}`;
+        }
+
+        async function fetchTariff(tariffName, tariffType, start, end) {
+            const params = new URLSearchParams({
+                tariff_name: tariffName,
+                tariff_type: tariffType,
+                start_timestamp: start,
+                end_timestamp: end
+            });
+            const res = await fetch(`${API_BASE}?${params}`);
+            if (!res.ok) throw new Error(`API Fehler: ${res.status}`);
+            return res.json();
+        }
+
+        function extractKwhPrices(data, key) {
+            if (!data || !data.prices) return [];
+            return data.prices.map(p => {
+                const entries = p[key] || [];
+                const kwh = entries.find(e => e.unit === 'CHF_kWh');
+                return {
+                    start: new Date(p.start_timestamp),
+                    end: new Date(p.end_timestamp),
+                    price: kwh ? kwh.value * 100 : null // CHF -> Rappen
+                };
+            }).filter(p => p.price !== null);
+        }
+
+        function getCurrentPrice(prices) {
+            const now = new Date();
+            return prices.find(p => now >= p.start && now < p.end);
+        }
+
+        function updateCards(integratedPrices) {
+            const prices = integratedPrices.map(p => p.price);
+            const current = getCurrentPrice(integratedPrices);
+            document.getElementById('currentPrice').textContent = current ? current.price.toFixed(2) : '--';
+            document.getElementById('lowPrice').textContent = Math.min(...prices).toFixed(2);
+            document.getElementById('highPrice').textContent = Math.max(...prices).toFixed(2);
+            document.getElementById('avgPrice').textContent = (prices.reduce((a, b) => a + b, 0) / prices.length).toFixed(2);
+        }
+
+        function getBarColor(price, min, max) {
+            const ratio = max === min ? 0.5 : (price - min) / (max - min);
+            if (ratio < 0.33) return '#4ade80';
+            if (ratio < 0.66) return '#fbbf24';
+            return '#f87171';
+        }
+
+        function updateTable(intPrices, elPrices) {
+            const tbody = document.getElementById('priceTable');
+            const now = new Date();
+            const allPrices = intPrices.map(p => p.price);
+            const min = Math.min(...allPrices);
+            const max = Math.max(...allPrices);
+
+            const elMap = new Map();
+            elPrices.forEach(p => elMap.set(p.start.getTime(), p.price));
+
+            tbody.innerHTML = intPrices.map(p => {
+                const timeStr = p.start.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })
+                    + ' - ' + p.end.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
+                const isCurrent = now >= p.start && now < p.end;
+                const elPrice = elMap.get(p.start.getTime());
+                const pct = max === min ? 50 : ((p.price - min) / (max - min)) * 100;
+                const color = getBarColor(p.price, min, max);
+                return `<tr class="${isCurrent ? 'current-row' : ''}">
+                    <td>${timeStr}</td>
+                    <td><strong>${p.price.toFixed(2)}</strong> Rp.</td>
+                    <td>${elPrice !== undefined ? elPrice.toFixed(2) + ' Rp.' : '-'}</td>
+                    <td><div class="price-bar"><div class="price-bar-fill" style="width:${Math.max(5, pct)}%;background:${color}"></div></div></td>
+                </tr>`;
+            }).join('');
+        }
+
+        function renderChart(prices, label) {
+            const ctx = document.getElementById('priceChart').getContext('2d');
+            const now = new Date();
+            const allValues = prices.map(p => p.price);
+            const min = Math.min(...allValues);
+            const max = Math.max(...allValues);
+
+            const colors = prices.map(p => {
+                if (now >= p.start && now < p.end) return '#38bdf8';
+                return getBarColor(p.price, min, max);
+            });
+
+            const borderColors = prices.map(p => {
+                if (now >= p.start && now < p.end) return '#0ea5e9';
+                return getBarColor(p.price, min, max);
+            });
+
+            if (chartInstance) chartInstance.destroy();
+
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: prices.map(p => p.start),
+                    datasets: [{
+                        label: label,
+                        data: prices.map(p => p.price),
+                        backgroundColor: colors.map(c => c + '99'),
+                        borderColor: borderColors,
+                        borderWidth: 1,
+                        borderRadius: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                title: items => {
+                                    const d = new Date(items[0].label);
+                                    return d.toLocaleDateString('de-CH', { weekday: 'short', day: '2-digit', month: '2-digit' })
+                                        + ' ' + d.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
+                                },
+                                label: item => ` ${item.raw.toFixed(2)} Rp./kWh`
+                            },
+                            backgroundColor: '#1e293b',
+                            borderColor: '#334155',
+                            borderWidth: 1,
+                            titleColor: '#f8fafc',
+                            bodyColor: '#e2e8f0'
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: { unit: 'hour', displayFormats: { hour: 'HH:mm' } },
+                            grid: { color: '#1e293b' },
+                            ticks: { color: '#64748b', maxTicksLimit: 24 }
+                        },
+                        y: {
+                            title: { display: true, text: 'Rp./kWh', color: '#94a3b8' },
+                            grid: { color: '#1e293b' },
+                            ticks: { color: '#64748b', callback: v => v.toFixed(1) },
+                            beginAtZero: false
+                        }
+                    }
+                }
+            });
+        }
+
+        function switchView(view) {
+            currentView = view;
+            document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+            updateDisplay();
+        }
+
+        function switchDay(day) {
+            currentDay = day;
+            document.querySelectorAll('[data-day]').forEach(b => b.classList.toggle('active', b.dataset.day === day));
+            updateDisplay();
+        }
+
+        function updateDisplay() {
+            const dayData = allData[currentDay];
+            if (!dayData) return;
+
+            const intPrices = extractKwhPrices(dayData.integrated, 'integrated');
+            const elPrices = extractKwhPrices(dayData.electricity, 'electricity');
+
+            const displayPrices = currentView === 'integrated' ? intPrices : elPrices;
+            const label = currentView === 'integrated' ? 'Gesamtpreis (Rp./kWh)' : 'Energiepreis (Rp./kWh)';
+
+            if (currentDay === 'today') {
+                updateCards(intPrices);
+            }
+
+            const dayLabel = currentDay === 'today' ? 'heute' : 'morgen';
+            document.getElementById('tableTitle').textContent = `Preise ${dayLabel} \u2014 15-Minuten-Intervalle`;
+
+            renderChart(displayPrices, label);
+            updateTable(intPrices, elPrices);
+        }
+
+        async function loadData() {
+            try {
+                const now = new Date();
+                const tomorrow = new Date(now);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+
+                const todayStart = toLocalISOString(now);
+                const todayEnd = endOfDayISO(now);
+                const tomorrowStart = toLocalISOString(tomorrow);
+                const tomorrowEnd = endOfDayISO(tomorrow);
+
+                // Fetch today's data (integrated + electricity)
+                const [intToday, elToday] = await Promise.all([
+                    fetchTariff('integrated_400D_E', 'integrated', todayStart, todayEnd),
+                    fetchTariff('electricity_dynamic', 'electricity', todayStart, todayEnd)
+                ]);
+
+                allData.today = { integrated: intToday, electricity: elToday };
+
+                const pubDate = new Date(intToday.publication_timestamp);
+                document.getElementById('pubTime').textContent =
+                    `Publiziert: ${pubDate.toLocaleDateString('de-CH')} ${pubDate.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })}`;
+
+                // Try fetching tomorrow's data
+                try {
+                    const [intTomorrow, elTomorrow] = await Promise.all([
+                        fetchTariff('integrated_400D_E', 'integrated', tomorrowStart, tomorrowEnd),
+                        fetchTariff('electricity_dynamic', 'electricity', tomorrowStart, tomorrowEnd)
+                    ]);
+
+                    if (intTomorrow.prices && intTomorrow.prices.length > 0) {
+                        allData.tomorrow = { integrated: intTomorrow, electricity: elTomorrow };
+                        document.getElementById('btnTomorrow').style.display = '';
+                    }
+                } catch (e) {
+                    // Tomorrow not yet available
+                }
+
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('content').style.display = '';
+                updateDisplay();
+
+                // Auto-refresh every 5 minutes
+                setTimeout(loadData, 5 * 60 * 1000);
+
+            } catch (err) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('errorMsg').style.display = '';
+                document.getElementById('errorMsg').textContent = `Fehler beim Laden der Daten: ${err.message}`;
+                setTimeout(loadData, 30 * 1000);
+            }
+        }
+
+        loadData();
+    </script>
+</body>
+</html>
