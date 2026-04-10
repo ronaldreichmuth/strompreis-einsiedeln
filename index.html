@@ -415,7 +415,7 @@
                         tooltip: {
                             callbacks: {
                                 title: items => {
-                                    const d = new Date(items[0].label);
+                                    const d = new Date(items[0].parsed.x);
                                     return d.toLocaleDateString('de-CH', { weekday: 'short', day: '2-digit', month: '2-digit' })
                                         + ' ' + d.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
                                 },
